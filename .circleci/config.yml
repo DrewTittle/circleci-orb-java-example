@@ -19,6 +19,7 @@ jobs:
 workflows:
   build:
     jobs:
+    - sonar-scan
     - cicd-orb/gradle-run:
         name: gradle-check
         executor: java-builder
