@@ -14,8 +14,8 @@ jobs:
     steps:
       - checkout
       - run:
-        name: Analyze on SonarCloud
-        command: gradle build sonarqube"
+          name: Analyze on SonarCloud
+          command: gradle build sonarqube"
 workflows:
   build:
     jobs:
