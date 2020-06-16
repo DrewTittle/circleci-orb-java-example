@@ -15,7 +15,7 @@ jobs:
       - checkout
       - run:
           name: Analyze on SonarCloud
-          command: gradle build sonarqube"
+          command: gradle build sonarqube
 workflows:
   build:
     jobs:
@@ -50,7 +50,7 @@ workflows:
         before_build:
         - attach_workspace:
             at: build/
-        image: talentreef/k8s-$CIRCLE_PROJECT_REPONAME
+        image: drewtittle/k8s-$CIRCLE_PROJECT_REPONAME
         requires:
         - gradle-test
         - gradle-build
