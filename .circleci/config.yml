@@ -9,6 +9,7 @@ orbs:
   cicd-orb: talentreef/cicd-orb@dev:alpha
 jobs:
   sonar-scan:
+    executor: java-builder
     steps:
       - checkout
       - run:
@@ -17,8 +18,7 @@ jobs:
 workflows:
   build:
     jobs:
-    - sonar-scan:
-        executor: java-builder
+    - sonar-scan
     - cicd-orb/gradle-run:
         name: gradle-check
         executor: java-builder
