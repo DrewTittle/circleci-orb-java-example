@@ -1,0 +1,139 @@
+# Deploy project to kubernetes
+#
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: ${CIRCLE_PROJECT_REPONAME}
+  labels:
+    app: ${CIRCLE_PROJECT_REPONAME}
+spec:
+  replicas: ${REPLICAS}
+  strategy:
+      type: RollingUpdate
+      rollingUpdate:
+        maxUnavailable: 0
+        maxSurge: 1
+  template:
+    metadata:
+      labels:
+        app: ${CIRCLE_PROJECT_REPONAME}
+      annotations:
+       consul.register/enabled: "true"
+       consul.register/service.name: "${CIRCLE_PROJECT_REPONAME}"
+       # Only configure these if your service is publishing Prometheus metrics
+       # prom.talentreef.com/should_be_scraped: "true"
+       # prom.talentreef.com/metric_path: /metrics
+       # prom.talentreef.com/scrape_port: "9000"
+    spec:
+      imagePullSecrets:
+      - name: regcred
+      containers:
+      - image: talentreef/k8s-${CIRCLE_PROJECT_REPONAME}:${CIRCLE_SHA1}
+        imagePullPolicy: Always
+        name: ${CIRCLE_PROJECT_REPONAME}
+        ports: # Ports that the container needs to expose
+        - containerPort: 8080
+          name: service-port
+        # Determine if a pod is alive.
+        # If livenessProbe fails, it will be killed
+        livenessProbe:
+          httpGet:
+            path: /
+            port: 8080
+          # initialDelaySeconds needs to be longer than the pod takes to start up
+          # otherwise it will get killed before it completes startup
+          initialDelaySeconds: 30
+          periodSeconds: 15
+        # Determine if a pod is ready to accept traffic.
+        # If readinessProbe fails, no traffic will be routed to it.
+        readinessProbe:
+          httpGet:
+            path: /
+            port: 8080
+          initialDelaySeconds: 10
+          periodSeconds: 5
+          successThreshold: 1
+        resources:
+          requests:
+            memory: "640Mi"
+            cpu: ".2"
+          limits:
+            memory: "640Mi"
+        env:
+          - name: JAVA_OPTS
+            value: "-Xms256m -Xmx512m"
+          - name: VAULT_TOKEN
+            valueFrom:
+              secretKeyRef:
+                name: vault-token
+                key: vault-token
+          - name: ENV
+            value: ${ENV}
+          - name: DEPLOY_USER
+            value: ${CIRCLE_USERNAME}
+          - name: DEPLOY_VERSION
+            value: ${CIRCLE_SHA1}
+        volumeMounts:
+        - mountPath: /etc/ssl/certs/consul-ca.cert
+          name: consul-ca-cert
+        - mountPath: /etc/ssl/certs/consul.cert
+          name: consul-cert
+        - mountPath: /etc/ssl/private/consul.key
+          name: consul-key
+      volumes:
+      - name: consul-ca-cert
+        hostPath:
+          path: /etc/ssl/certs/consul-ca.cert
+          type: FileOrCreate
+      - name: consul-cert
+        hostPath:
+          path: /etc/ssl/certs/consul.cert
+          type: FileOrCreate
+      - name: consul-key
+        hostPath:
+          path: /etc/ssl/private/consul.key
+          type: FileOrCreate
+      # Prefer not to live with other pods of same app
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              topologyKey: kubernetes.io/hostname
+              labelSelector:
+                matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                  - store
+---
+apiVersion: extensions/v1beta1
+kind: Ingress
+metadata:
+  name: ${CIRCLE_PROJECT_REPONAME}
+  annotations:
+    kubernetes.io/ingress.class: traefik
+    external-dns.alpha.kubernetes.io/target: ${ENV}-eks-svc.${DOMAIN}
+spec:
+  rules:
+  -
+    host: ${ENV}-${CIRCLE_PROJECT_REPONAME}.${DOMAIN}
+    http:
+      paths:
+      - path: /
+        backend:
+          serviceName: ${CIRCLE_PROJECT_REPONAME}
+          servicePort: 80
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ${CIRCLE_PROJECT_REPONAME}
+spec:
+  ports:
+  - name: ${CIRCLE_PROJECT_REPONAME}
+    port: 80
+    targetPort: 8080
+    protocol: TCP
+  selector:
+    app: ${CIRCLE_PROJECT_REPONAME}

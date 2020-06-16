@@ -1,0 +1,95 @@
+version: 2.1
+executors:
+  java-builder:
+    docker:
+    - image: cimg/openjdk:8.0.252
+    environment:
+      JVM_OPTS: -Xmx512m
+orbs:
+  cicd-orb: talentreef/cicd-orb@dev:alpha
+workflows:
+  build:
+    jobs:
+    - cicd-orb/gradle-run:
+        name: gradle-check
+        executor: java-builder
+    - cicd-orb/gradle-run:
+        name: gradle-build
+        executor: java-builder
+        post-steps:
+        - run:
+            name: Current git commit hash
+            command: echo $CIRCLE_SHA1
+        - persist_to_workspace:
+            root: build
+            paths:
+            - libs
+    - cicd-orb/gradle-test:
+        name: gradle-test
+        executor: java-builder
+    - cicd-orb/docker-lint:
+        name: docker-lint
+        dockerfiles: Dockerfile
+        trusted-registries: docker.io
+    - cicd-orb/anchore-scan:
+        name: anchore-scan
+        requires:
+        - gradle-build
+    - cicd-orb/docker-publish:
+        name: docker-publish
+        before_build:
+        - attach_workspace:
+            at: build/
+        image: talentreef/k8s-$CIRCLE_PROJECT_REPONAME
+        requires:
+        - gradle-test
+        - gradle-build
+        - docker-lint
+        - anchore-scan
+        filters:
+          branches:
+            only: master
+    - approve-deploy-qa:
+        type: approval
+        requires:
+        - docker-publish
+    - approve-deploy-uat:
+        type: approval
+        requires:
+        - docker-publish
+    - approve-deploy-prod:
+        type: approval
+        requires:
+        - docker-publish
+    - cicd-orb/kube-deploy:
+        name: deploy-dev
+        environment: dev
+        replicas: 1
+        kubeconfigfile: k8s/deploy.yml
+        requires:
+        - docker-publish
+        context: vault
+    - cicd-orb/kube-deploy:
+        name: deploy-qa
+        environment: qa
+        replicas: 1
+        kubeconfigfile: k8s/deploy.yml
+        requires:
+        - approve-deploy-qa
+        context: vault
+    - cicd-orb/kube-deploy:
+        name: deploy-uat
+        environment: uat
+        replicas: 1
+        kubeconfigfile: k8s/deploy.yml
+        requires:
+        - approve-deploy-uat
+        context: vault
+    - cicd-orb/kube-deploy:
+        name: deploy-prod
+        environment: prod
+        replicas: 1
+        kubeconfigfile: k8s/deploy.yml
+        requires:
+        - approve-deploy-prod
+        context: vault
