@@ -20,6 +20,7 @@ workflows:
   build:
     jobs:
     - sonar-scan
+        context: SonarCloud
     - cicd-orb/gradle-run:
         name: gradle-check
         executor: java-builder
@@ -59,6 +60,10 @@ workflows:
         filters:
           branches:
             only: master
+    - approve-deploy-dev:
+        type: approval
+        requires:
+        - docker-publish
     - approve-deploy-qa:
         type: approval
         requires:
@@ -77,6 +82,7 @@ workflows:
         replicas: 1
         kubeconfigfile: k8s/deploy.yml
         requires:
+        - approve-deploy-dev
         - docker-publish
         context: vault
     - cicd-orb/kube-deploy:
