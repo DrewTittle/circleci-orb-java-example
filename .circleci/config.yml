@@ -9,7 +9,8 @@ orbs:
   cicd-orb: talentreef/cicd-orb@dev:alpha
 jobs:
   sonar-scan:
-    executor: java-builder
+    docker:
+      - image: 'circleci/openjdk:11-jdk'
     steps:
       - checkout
       - run:
