@@ -19,7 +19,7 @@ jobs:
 workflows:
   build:
     jobs:
-    - sonar-scan
+    - sonar-scan:
         context: SonarCloud
     - cicd-orb/gradle-run:
         name: gradle-check
